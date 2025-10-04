@@ -13,6 +13,7 @@ using QuikSharp.DataStructures.Transaction;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
+using QuikSharpDemo.Properties;
 
 namespace QuikSharpDemo
 {
@@ -20,6 +21,7 @@ namespace QuikSharpDemo
     {
         readonly Char separator = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator[0];
         public static Quik _quik;
+        int portConnection = Quik.DefaultPort;
         bool isServerConnected = false;
         bool isSubscribedToolOrderBook = false;
         bool isSubscribedToolCandles = false;
@@ -45,6 +47,7 @@ namespace QuikSharpDemo
         List<BuySellInfo> listBuySellInfo;
         FormOutputTable toolCandlesTable;
         FormOrderBook toolOrderBookTable;
+        FormRequestValue requestValue;
         Order order;
         FuturesLimits futLimit;
         FuturesClientHolding futuresPosition;
@@ -59,17 +62,21 @@ namespace QuikSharpDemo
         }
         void Init()
         {
-            textBoxSecCode.Text         = secCode;
-            textBoxClassCode.Text       = classCode;
-            buttonRun.Enabled           = false;
-            buttonCommandRun.Enabled    = false;
-            timerRenewForm.Enabled      = false;
-            listBoxCommands.Enabled     = false;
+            textBoxSecCode.Text                 = secCode;
+            textBoxClassCode.Text               = classCode;
+            numericUpDownPortConnection.Value   = Convert.ToDecimal(portConnection);
+            buttonRun.Enabled                   = false;
+            buttonCommandRun.Enabled            = false;
+            timerRenewForm.Enabled              = false;
+            listBoxCommands.Enabled             = false;
             listBoxCommands.Items.Add("Получить исторические данные");
+            listBoxCommands.Items.Add("Получить исторические данные (с параметром `bid`)");
             listBoxCommands.Items.Add("Выставить лимитрированную заявку (без сделки)");
             listBoxCommands.Items.Add("Выставить лимитрированную заявку (c выполнением!!!)");
             listBoxCommands.Items.Add("Выставить рыночную заявку (c выполнением!!!)");
             listBoxCommands.Items.Add("Удалить активную заявку");
+            listBoxCommands.Items.Add("Получить заявку по номеру");
+            listBoxCommands.Items.Add("Получить заявку по ID транзакции");
             listBoxCommands.Items.Add("Получить информацию по бумаге");
             listBoxCommands.Items.Add("Получить таблицу лимитов по бумаге");
             listBoxCommands.Items.Add("Получить таблицу лимитов по всем бумагам");
@@ -94,12 +101,10 @@ namespace QuikSharpDemo
         {
             try
             {
-                textBoxLogsWindow.AppendText("Подключаемся к терминалу Quik..." + Environment.NewLine);
+                portConnection = Convert.ToUInt16(numericUpDownPortConnection.Value);
+                textBoxLogsWindow.AppendText("Подключаемся к терминалу Quik (порт: " + portConnection.ToString() + ")..." + Environment.NewLine);
                 if (checkBoxRemoteHost.Checked) _quik = new Quik(Quik.DefaultPort, new InMemoryStorage(), textBoxHost.Text);    // инициализируем объект Quik с использованием удаленного IP-адреса терминала
-                else _quik = new Quik(Quik.DefaultPort, new InMemoryStorage());    // инициализируем объект Quik с использованием локального расположения терминала (по умолчанию)
-                //// Отладочный вариант подключения
-                //if (checkBoxRemoteHost.Checked) _quik = new Quik(34136, new InMemoryStorage(), textBoxHost.Text);    // инициализируем объект Quik с использованием удаленного IP-адреса терминала
-                //else _quik = new Quik(34144, new InMemoryStorage());    // инициализируем объект Quik с использованием локального расположения терминала (по умолчанию)
+                else _quik = new Quik(portConnection, new InMemoryStorage());    // инициализируем объект Quik с использованием локального расположения терминала (по умолчанию)
             }
             catch
             {
@@ -124,6 +129,20 @@ namespace QuikSharpDemo
                             comboBox_ClientCode.SelectedItem = comboBox_ClientCode.Items[0];
                             clientCode = comboBox_ClientCode.SelectedItem.ToString();
                         }
+
+                        textBoxLogsWindow.AppendText("Определяем аккаунт..." + Environment.NewLine);
+                        List<TradesAccounts> accounts = _quik.Class.GetTradeAccounts().Result;
+                        if (accounts.Count > 0)
+                        {
+                            foreach(TradesAccounts account in accounts)
+                            {
+                                textBoxLogsWindow.AppendText("Найден аккаунт: " + "firmID-"+account.Firmid + ", TrdaccId-" + account.TrdaccId + ", MainTrdaccid-" + account.MainTrdaccid + Environment.NewLine);
+                            }
+                            //comboBox_ClientCode.Items.AddRange(codes.ToArray<object>());
+                            //comboBox_ClientCode.SelectedItem = comboBox_ClientCode.Items[0];
+                            //clientCode = comboBox_ClientCode.SelectedItem.ToString();
+                        }
+
                         buttonRun.Enabled = true;
                         buttonStart.Enabled = false;
                     }
@@ -299,6 +318,9 @@ namespace QuikSharpDemo
                 case "Получить исторические данные":
                     textBoxDescription.Text = "Получить и отобразить исторические данные котировок по заданному инструменту. Тайм-фрейм = 15 Minute";
                     break;
+                case "Получить исторические данные (с параметром `bid`)":
+                    textBoxDescription.Text = "Получить и отобразить исторические данные котировок по заданному инструменту и параметру `bid`. Тайм-фрейм = 15 Minute";
+                    break;
                 case "Выставить лимитрированную заявку (без сделки)":
                     textBoxDescription.Text = "Будет выставлена заявку на покупку 1-го лота заданного инструмента, по цене на 5% ниже текущей цены (вероятность срабатывания такой заявки достаточно низкая, чтобы успеть ее отменить)";
                     break;
@@ -310,6 +332,12 @@ namespace QuikSharpDemo
                     break;
                 case "Выставить заявку (Удалить активную заявку)":
                     textBoxDescription.Text = "Если предварительно была выставлена заявка, заявка имеет статус 'Активна' и ее номер отображается в форме, то эта заявка будет удалена/отменена";
+                    break;
+                case "Получить заявку по номеру":
+                    textBoxDescription.Text = "Попытаться получить заявку по номеру, который укажет пользователь";
+                    break;
+                case "Получить заявку по ID транзакции)":
+                    textBoxDescription.Text = "Попытаться получить заявку по ID транзакции, который укажет пользователь";
                     break;
                 case "Получить таблицу лимитов по бумаге":
                     textBoxDescription.Text = "Получить и отобразить таблицу лимитов по бумагам. quik.Trading.GetDepoLimits(securityCode)";
@@ -388,6 +416,26 @@ namespace QuikSharpDemo
                         {
                             AppendText2TextBox(textBoxLogsWindow, "Получаем исторические данные..." + Environment.NewLine);
                             toolCandles = _quik.Candles.GetAllCandles(tool.ClassCode, tool.SecurityCode, CandleInterval.M15).Result;
+                            AppendText2TextBox(textBoxLogsWindow, "Выводим исторические данные в таблицу..." + Environment.NewLine);
+                            toolCandlesTable = new FormOutputTable(toolCandles);
+                            toolCandlesTable.Show();
+                            _quik.Candles.NewCandle += OnNewCandleDo;
+                        }
+                        else AppendText2TextBox(textBoxLogsWindow, "Неудачная попытка подписки на исторические данные." + Environment.NewLine);
+                    }
+                    catch { AppendText2TextBox(textBoxLogsWindow, "Ошибка получения исторических данных." + Environment.NewLine); }
+                    break;
+                case "Получить исторические данные (с параметром `bid`)":
+                    try
+                    {
+                        AppendText2TextBox(textBoxLogsWindow, "Подписываемся на получение исторических данных..." + Environment.NewLine);
+                        _quik.Candles.Subscribe(tool.ClassCode, tool.SecurityCode, CandleInterval.M15, "bid").Wait();
+                        AppendText2TextBox(textBoxLogsWindow, "Проверяем состояние подписки..." + Environment.NewLine);
+                        isSubscribedToolCandles = _quik.Candles.IsSubscribed(tool.ClassCode, tool.SecurityCode, CandleInterval.M15, "bid").Result;
+                        if (isSubscribedToolCandles)
+                        {
+                            AppendText2TextBox(textBoxLogsWindow, "Получаем исторические данные..." + Environment.NewLine);
+                            toolCandles = _quik.Candles.GetAllCandles(tool.ClassCode, tool.SecurityCode, CandleInterval.M15, "bid").Result;
                             AppendText2TextBox(textBoxLogsWindow, "Выводим исторические данные в таблицу..." + Environment.NewLine);
                             toolCandlesTable = new FormOutputTable(toolCandles);
                             toolCandlesTable.Show();
@@ -485,6 +533,98 @@ namespace QuikSharpDemo
                         Text2TextBox(textBoxOrderNumber, "");
                     }
                     catch { AppendText2TextBox(textBoxLogsWindow, "Ошибка удаления заявки." + Environment.NewLine); }
+                    break;
+                case "Получить заявку по номеру":
+                    try
+                    {
+                        AppendText2TextBox(textBoxLogsWindow, "Запрашиваем номер заявки у пользователя..." + Environment.NewLine);
+                        requestValue = new FormRequestValue();
+                        requestValue.ShowDialog();
+                        String requestedValue = requestValue.RequestedValue;
+                        requestValue.Dispose();
+                        if (requestedValue.Length > 0)
+                        {
+                            long orderNumber = 0;
+                            try
+                            {
+                                orderNumber = Convert.ToInt64(requestedValue.Replace(" ", ""));
+                            }
+                            catch
+                            {
+                                AppendText2TextBox(textBoxLogsWindow, "Полученное от пользователя значение не удалось преобразовать в номер заявки. Запрос не будет выполнен." + Environment.NewLine);
+                            }
+                            if (orderNumber > 0)
+                            {
+                                AppendText2TextBox(textBoxLogsWindow, "Ищем заявку с номером - " + orderNumber + " ..." + Environment.NewLine);
+                                Order findOrder = _quik.Orders.GetOrder_by_Number(orderNumber).Result;
+                                if (findOrder != null) 
+                                {
+                                    listOrders = new List<Order>
+                                    {
+                                        findOrder
+                                    };
+                                    AppendText2TextBox(textBoxLogsWindow, "Выводим данные о заявке в таблицу..." + Environment.NewLine);
+                                    toolCandlesTable = new FormOutputTable(listOrders);
+                                    toolCandlesTable.Show();
+                                }
+                                else
+                                {
+                                    AppendText2TextBox(textBoxLogsWindow, "Не удалось найти заявку по указанному номеру..." + Environment.NewLine);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            AppendText2TextBox(textBoxLogsWindow, "Номер заявки не указан. Запрос не будет выполнен." + Environment.NewLine);
+                        }
+                    }
+                    catch { AppendText2TextBox(textBoxLogsWindow, "Ошибка получения заявки по номеру." + Environment.NewLine); }
+                    break;
+                case "Получить заявку по ID транзакции":
+                    try
+                    {
+                        AppendText2TextBox(textBoxLogsWindow, "Запрашиваем ID транзакции у пользователя..." + Environment.NewLine);
+                        requestValue = new FormRequestValue();
+                        requestValue.ShowDialog();
+                        String requestedValue = requestValue.RequestedValue;
+                        requestValue.Dispose();
+                        if (requestedValue.Length > 0)
+                        {
+                            long transID = 0;
+                            try
+                            {
+                                transID = Convert.ToInt64(requestedValue.Replace(" ", ""));
+                            }
+                            catch
+                            {
+                                AppendText2TextBox(textBoxLogsWindow, "Полученное от пользователя значение не удалось преобразовать в ID транзакции. Запрос не будет выполнен." + Environment.NewLine);
+                            }
+                            if (transID > 0)
+                            {
+                                AppendText2TextBox(textBoxLogsWindow, "Ищем заявку с ID транзакции - " + transID + " ..." + Environment.NewLine);
+                                Order findOrder = _quik.Orders.GetOrder_by_transID(tool.ClassCode, tool.SecurityCode, transID).Result;
+                                if (findOrder != null)
+                                {
+                                    listOrders = new List<Order>
+                                    {
+                                        findOrder
+                                    };
+                                    AppendText2TextBox(textBoxLogsWindow, "Выводим данные о заявке в таблицу..." + Environment.NewLine);
+                                    toolCandlesTable = new FormOutputTable(listOrders);
+                                    toolCandlesTable.Show();
+                                }
+                                else
+                                {
+                                    AppendText2TextBox(textBoxLogsWindow, "Не удалось найти заявку по указанному ID транзакции..." + Environment.NewLine);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            AppendText2TextBox(textBoxLogsWindow, "ID транзакции не указан. Запрос не будет выполнен." + Environment.NewLine);
+                        }
+                    }
+                    catch { AppendText2TextBox(textBoxLogsWindow, "Ошибка получения заявки по ID транзакции." + Environment.NewLine); }
                     break;
                 case "Получить информацию по бумаге":
                     try
